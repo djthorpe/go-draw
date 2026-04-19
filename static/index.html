@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Go Draw</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #12131a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      height: 48px;
+      background: #1c1d2b;
+      border-bottom: 1px solid #2a2b3d;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; color: #ff6b8a; }
+    #conn-status { font-size: 0.72rem; color: #555; }
+    #conn-status.ok { color: #2ecc71; }
+
+    #game-hud {
+      margin-left: auto;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+    #game-hud.visible { display: flex; }
+    #hud-drawer { font-size: 0.82rem; color: #aaa; }
+    #hud-drawer strong { color: #fff; }
+
+    #hud-timer {
+      font-size: 1rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #2ecc71;
+      min-width: 38px;
+      text-align: right;
+      transition: color 0.5s;
+    }
+    #hud-timer.warn   { color: #f39c12; }
+    #hud-timer.danger { color: #e74c3c; animation: pulse 0.8s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    #header-join {
+      margin-left: auto;
+      padding: 5px 14px;
+      background: #ff6b8a;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    #header-join:hover { background: #e0506e; }
+
+    /* ── Hint / word bar ─────────────────────────────────── */
+    #hint-bar {
+      height: 36px;
+      background: #16172a;
+      border-bottom: 1px solid #2a2b3d;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    #hint-bar.visible { display: flex; }
+    #hint-text {
+      font-size: 1rem;
+      letter-spacing: 0.15em;
+      font-weight: 600;
+      color: #ccc;
+    }
+    #hint-text .word-reveal { color: #fff; }
+    #hint-len { font-size: 0.72rem; color: #555; }
+
+    /* ── Main layout ─────────────────────────────────────── */
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    aside {
+      width: 170px;
+      background: #1c1d2b;
+      border-right: 1px solid #2a2b3d;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .sidebar-section {
+      padding: 10px 12px 6px;
+    }
+    .sidebar-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #444;
+      margin-bottom: 8px;
+    }
+    #player-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #player-list li {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.8rem;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .pname { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pscore { font-size: 0.72rem; color: #f39c12; font-weight: 700; min-width: 18px; text-align: right; }
+    .you-tag { font-size: 0.6rem; color: #555; }
+
+    .sidebar-divider { height: 1px; background: #2a2b3d; margin: 8px 0 0; }
+
+    #chat-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      scrollbar-width: thin;
+      scrollbar-color: #2a2b3d transparent;
+    }
+    .chat-msg {
+      font-size: 0.75rem;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .chat-msg .sender { font-weight: 600; }
+    .chat-msg.correct .sender { color: #2ecc71; }
+    .chat-msg.correct .body   { color: #2ecc71; }
+    .chat-msg.system  { color: #666; font-style: italic; }
+    .chat-msg.reveal  { color: #f39c12; font-weight: 600; }
+
+    /* ── Canvas area ─────────────────────────────────────── */
+    #canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d0d12;
+      overflow: hidden;
+      padding: 14px;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      background: #fff;
+      cursor: crosshair;
+      box-shadow: 0 6px 40px rgba(0,0,0,0.7);
+      border-radius: 2px;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    canvas.watching { cursor: default; }
+
+    /* canvas overlay for between-turn reveal */
+    #canvas-overlay {
+      position: absolute;
+      inset: 14px;
+      background: rgba(0,0,0,0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      backdrop-filter: blur(2px);
+    }
+    #canvas-overlay.visible { display: flex; }
+    #overlay-box {
+      text-align: center;
+      padding: 28px 36px;
+      background: #1c1d2b;
+      border: 1px solid #2a2b3d;
+      border-radius: 12px;
+    }
+    #overlay-label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.1em; }
+    #overlay-word  { font-size: 2.4rem; font-weight: 800; color: #fff; text-transform: uppercase; letter-spacing: 0.08em; margin: 6px 0 4px; }
+    #overlay-sub   { font-size: 0.85rem; color: #aaa; }
+    #overlay-next  { font-size: 0.72rem; color: #555; margin-top: 10px; }
+
+    /* ── Bottom bar ──────────────────────────────────────── */
+    #bottom-bar {
+      height: 52px;
+      background: #1c1d2b;
+      border-top: 1px solid #2a2b3d;
+      display: none;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    #bottom-bar.visible { display: flex; }
+
+    .tool-btn {
+      padding: 5px 14px;
+      background: transparent;
+      border: 1px solid #2a2b3d;
+      color: #aaa;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+    .tool-btn.active { background: #2a2b3d; color: #fff; border-color: #4a7eff; }
+    .tool-btn:hover:not(.active) { background: #22233a; color: #ccc; }
+
+    #size-wrap { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #555; }
+    #size-slider { width: 88px; accent-color: #4a7eff; }
+    #my-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); display: none; }
+    #my-swatch.visible { display: block; }
+
+    #bar-divider { width: 1px; height: 28px; background: #2a2b3d; margin: 0 4px; display: none; }
+    #bar-divider.visible { display: block; }
+
+    #guess-group {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+    #guess-group.visible { display: flex; }
+    #guess-group input {
+      flex: 1;
+      padding: 7px 13px;
+      background: #12131a;
+      border: 1px solid #2a2b3d;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.88rem;
+      outline: none;
+    }
+    #guess-group input:focus { border-color: #4a7eff; }
+    #guess-btn {
+      padding: 7px 16px;
+      background: #4a7eff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #guess-btn:hover { background: #3060dd; }
+
+    /* ── Join overlay ────────────────────────────────────── */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    #overlay.hidden { display: none; }
+    .modal {
+      background: #1c1d2b;
+      border: 1px solid #2a2b3d;
+      border-radius: 14px;
+      padding: 28px 28px 22px;
+      width: 310px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+    .modal h2 { font-size: 1.2rem; font-weight: 700; text-align: center; }
+    .modal p  { font-size: 0.8rem; color: #666; text-align: center; }
+    .modal input {
+      width: 100%;
+      padding: 9px 13px;
+      background: #12131a;
+      border: 1px solid #2a2b3d;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .modal input:focus { border-color: #4a7eff; }
+    .btn-primary {
+      padding: 9px;
+      background: #ff6b8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: #e0506e; }
+    .btn-ghost {
+      padding: 8px;
+      background: transparent;
+      border: 1px solid #2a2b3d;
+      color: #666;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.84rem;
+    }
+    .btn-ghost:hover { background: #22233a; color: #aaa; }
+    #join-err { font-size: 0.75rem; color: #e74c3c; text-align: center; min-height: 1em; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Go Draw</h1>
+  <span id="conn-status">Connecting…</span>
+  <div id="game-hud">
+    <span id="hud-drawer"></span>
+    <span id="hud-timer">2:00</span>
+  </div>
+  <button id="header-join" style="display:none" onclick="showOverlay()">Join Game</button>
+</header>
+
+<div id="hint-bar">
+  <span id="hint-text"></span>
+  <span id="hint-len"></span>
+</div>
+
+<main>
+  <aside>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Players</div>
+      <ul id="player-list"></ul>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section" style="padding-bottom:4px">
+      <div class="sidebar-label">Chat</div>
+    </div>
+    <div id="chat-log"></div>
+  </aside>
+
+  <div id="canvas-wrap">
+    <canvas id="canvas" width="1400" height="800"></canvas>
+    <div id="canvas-overlay">
+      <div id="overlay-box">
+        <div id="overlay-label">The word was</div>
+        <div id="overlay-word"></div>
+        <div id="overlay-sub"></div>
+        <div id="overlay-next"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="bottom-bar">
+  <button class="tool-btn active" id="btn-pen"    onclick="setTool('pen')">Pen</button>
+  <button class="tool-btn"        id="btn-eraser" onclick="setTool('eraser')">Eraser</button>
+  <button class="tool-btn"        id="btn-clear"  onclick="clearCanvas()">Clear</button>
+  <div id="size-wrap">
+    Size
+    <input type="range" id="size-slider" min="1" max="40" value="4"
+           oninput="onSizeChange(this.value)">
+    <span id="size-val">4</span>
+  </div>
+  <div id="my-swatch"></div>
+  <div id="bar-divider"></div>
+  <div id="guess-group">
+    <input id="guess-input" type="text" placeholder="Type your guess…"
+           maxlength="50" onkeydown="if(event.key==='Enter') sendGuess()">
+    <button id="guess-btn" onclick="sendGuess()">Guess</button>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="modal">
+    <h2>Go Draw</h2>
+    <p>Join to draw and guess, or just watch.</p>
+    <input id="name-input" type="text" placeholder="Your name…" maxlength="24"
+           onkeydown="if(event.key==='Enter') doJoin()">
+    <button class="btn-primary" onclick="doJoin()">Join &amp; Play</button>
+    <button class="btn-ghost"   onclick="doWatch()">Just Watch</button>
+    <div id="join-err"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const canvas      = document.getElementById('canvas');
+const ctx         = canvas.getContext('2d');
+const overlay     = document.getElementById('overlay');
+const canvasOverlay = document.getElementById('canvas-overlay');
+const gameHud     = document.getElementById('game-hud');
+const hudDrawer   = document.getElementById('hud-drawer');
+const hudTimer    = document.getElementById('hud-timer');
+const hintBar     = document.getElementById('hint-bar');
+const hintText    = document.getElementById('hint-text');
+const hintLen     = document.getElementById('hint-len');
+const bottomBar   = document.getElementById('bottom-bar');
+const guessGroup  = document.getElementById('guess-group');
+const barDivider  = document.getElementById('bar-divider');
+const pList       = document.getElementById('player-list');
+const chatLog     = document.getElementById('chat-log');
+const statusEl    = document.getElementById('conn-status');
+const headerJoin  = document.getElementById('header-join');
+const swatch      = document.getElementById('my-swatch');
+const slider      = document.getElementById('size-slider');
+const sizeValEl   = document.getElementById('size-val');
+
+// ── State ──────────────────────────────────────────────────────────────────
+let ws          = null;
+let joined      = false;
+let myName      = null;
+let myColor     = null;
+let tool        = 'pen';
+let brushSize   = 4;
+let drawing     = false;
+let lastX = 0, lastY = 0;
+
+let gameRole    = null;   // 'draw' | 'guess' | 'watch' | null
+let gameDrawer  = null;
+let gameWord    = null;
+let gameWordLen = 0;
+let timerSecs   = 0;
+let timerIval   = null;
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host  = location.host || 'localhost:8080';
+  ws = new WebSocket(`${proto}//${host}/ws`);
+  ws.onopen    = () => { statusEl.textContent = 'Connected'; statusEl.className = 'ok'; };
+  ws.onclose   = () => {
+    statusEl.textContent = 'Disconnected — reconnecting…';
+    statusEl.className = '';
+    joined = false;
+    setTimeout(connect, 2000);
+  };
+  ws.onerror   = () => ws.close();
+  ws.onmessage = e => handle(JSON.parse(e.data));
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+// ── Message handler ────────────────────────────────────────────────────────
+function handle(msg) {
+  switch (msg.type) {
+    case 'welcome':
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const op of (msg.canvas || [])) renderOp(op);
+      renderPlayers(msg.players || []);
+      // If a game is already running, set up game display for spectator
+      if (msg.role) setupTurnUI(msg, false);
+      overlay.classList.remove('hidden');
+      headerJoin.style.display = 'none';
+      break;
+
+    case 'joined':
+      myColor = msg.color;
+      swatch.style.background = myColor;
+      swatch.classList.add('visible');
+      overlay.classList.add('hidden');
+      joined = true;
+      headerJoin.style.display = 'none';
+      renderPlayers(msg.players || []);
+      break;
+
+    case 'players':
+      renderPlayers(msg.players || []);
+      break;
+
+    case 'op':
+      if (msg.op) renderOp(msg.op);
+      break;
+
+    case 'clear':
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      break;
+
+    case 'turn':
+      canvasOverlay.classList.remove('visible');
+      if (msg.clear) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setupTurnUI(msg, true);
+      renderPlayers(msg.players || []);
+      addChat('system', `— ${msg.drawer} is drawing —`);
+      break;
+
+    case 'turn_end':
+      stopTimer();
+      renderPlayers(msg.players || []);
+      showTurnEnd(msg);
+      break;
+
+    case 'chat':
+      if (msg.correct) {
+        addChat('correct', `${esc(msg.sender)} guessed it! 🎉`);
+      } else {
+        addChat('normal', `<span class="sender" style="color:${chatSenderColor(msg.sender)}">${esc(msg.sender)}:</span> ${esc(msg.text)}`);
+      }
+      break;
+
+    case 'error':
+      document.getElementById('join-err').textContent = msg.err || '';
+      break;
+  }
+}
+
+// ── Turn UI setup ──────────────────────────────────────────────────────────
+function setupTurnUI(msg, isNew) {
+  gameRole    = msg.role || 'watch';
+  gameDrawer  = msg.drawer;
+  gameWord    = msg.word   || null;
+  gameWordLen = msg.wordLen || (msg.word ? msg.word.length : 0);
+
+  // HUD
+  gameHud.classList.add('visible');
+  hudDrawer.innerHTML = `<strong>${esc(msg.drawer)}</strong> is drawing`;
+
+  // Hint bar
+  hintBar.classList.add('visible');
+  if (gameRole === 'draw') {
+    hintText.innerHTML = `Your word: <span class="word-reveal">${esc(gameWord).toUpperCase()}</span>`;
+    hintLen.textContent = '';
+  } else {
+    hintText.textContent = Array(gameWordLen).fill('_').join('  ');
+    hintLen.textContent  = `(${gameWordLen} letters)`;
+  }
+
+  // Bottom bar: tools for all joined players; guess input only for guessers
+  const canDraw  = joined && gameRole !== 'watch';
+  const canGuess = joined && gameRole === 'guess';
+  canvas.classList.toggle('watching', !canDraw);
+  bottomBar.classList.toggle('visible', canDraw);
+  guessGroup.classList.toggle('visible', canGuess);
+  barDivider.classList.toggle('visible', canGuess);
+  if (canGuess) {
+    document.getElementById('guess-input').disabled = false;
+    document.getElementById('guess-input').value = '';
+  }
+
+  if (isNew) startTimer(msg.timeLeft || 120);
+  else updateTimerDisplay(msg.timeLeft || 120);
+}
+
+// ── Turn end ───────────────────────────────────────────────────────────────
+function showTurnEnd(msg) {
+  // Disable interaction
+  gameRole = null;
+  bottomBar.classList.remove('visible');
+  guessGroup.classList.remove('visible');
+  barDivider.classList.remove('visible');
+  hintBar.classList.remove('visible');
+  gameHud.classList.remove('visible');
+  canvas.classList.add('watching');
+
+  // Canvas overlay
+  document.getElementById('overlay-word').textContent = (msg.word || '').toUpperCase();
+
+  let sub = '';
+  if (msg.reason === 'guessed' && msg.guesser) {
+    sub = `${esc(msg.guesser)} guessed it! 🎉`;
+    addChat('reveal', `The word was: ${esc(msg.word)}`);
+  } else if (msg.reason === 'left') {
+    sub = 'The drawer left.';
+    addChat('reveal', `The word was: ${esc(msg.word)}`);
+  } else {
+    sub = 'Time\'s up!';
+    addChat('reveal', `The word was: ${esc(msg.word)}`);
+  }
+  document.getElementById('overlay-sub').textContent = sub;
+  document.getElementById('overlay-next').textContent = 'Next turn starting…';
+  canvasOverlay.classList.add('visible');
+}
+
+// ── Timer ──────────────────────────────────────────────────────────────────
+function startTimer(secs) {
+  stopTimer();
+  timerSecs = secs;
+  updateTimerDisplay(timerSecs);
+  timerIval = setInterval(() => {
+    timerSecs--;
+    if (timerSecs <= 0) { timerSecs = 0; stopTimer(); }
+    updateTimerDisplay(timerSecs);
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerIval) { clearInterval(timerIval); timerIval = null; }
+}
+
+function updateTimerDisplay(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  hudTimer.textContent = `${m}:${String(sec).padStart(2, '0')}`;
+  hudTimer.className = s <= 10 ? 'danger' : s <= 30 ? 'warn' : '';
+}
+
+// ── Canvas rendering ───────────────────────────────────────────────────────
+function renderOp(op) {
+  ctx.beginPath();
+  ctx.moveTo(op.x0, op.y0);
+  ctx.lineTo(op.x1, op.y1);
+  ctx.strokeStyle = op.color;
+  ctx.lineWidth   = op.size;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+}
+
+// ── Player list ────────────────────────────────────────────────────────────
+function renderPlayers(players) {
+  pList.innerHTML = '';
+  // Sort by score descending
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  for (const p of sorted) {
+    const isMe = joined && p.name === myName;
+    const li = document.createElement('li');
+    const isDrawer = gameDrawer && p.name === gameDrawer && gameRole !== null;
+    li.innerHTML =
+      `<span class="dot" style="background:${esc(p.color)}"></span>` +
+      `<span class="pname">${esc(p.name)}${isDrawer ? ' ✏️' : ''}${isMe ? ' <span class="you-tag">(you)</span>' : ''}</span>` +
+      `<span class="pscore">${p.score || ''}</span>`;
+    pList.appendChild(li);
+  }
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+const senderColors = {};
+function chatSenderColor(name) {
+  if (!senderColors[name]) {
+    // pick a stable pastel from a hash
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+    senderColors[name] = `hsl(${h % 360}, 55%, 65%)`;
+  }
+  return senderColors[name];
+}
+
+function addChat(type, html) {
+  const div = document.createElement('div');
+  div.className = `chat-msg ${type}`;
+  div.innerHTML = `<span class="body">${html}</span>`;
+  chatLog.appendChild(div);
+  // Keep last 60 messages
+  while (chatLog.children.length > 60) chatLog.removeChild(chatLog.firstChild);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// ── Join / overlay ─────────────────────────────────────────────────────────
+function showOverlay() { overlay.classList.remove('hidden'); }
+
+function doJoin() {
+  const name = document.getElementById('name-input').value.trim();
+  if (!name) { document.getElementById('join-err').textContent = 'Enter a name.'; return; }
+  myName = name;
+  send({ type: 'join', name });
+}
+
+function doWatch() {
+  overlay.classList.add('hidden');
+  canvas.classList.add('watching');
+  headerJoin.style.display = '';
+}
+
+// ── Tools ──────────────────────────────────────────────────────────────────
+function clearCanvas() { send({ type: 'clear' }); }
+
+function setTool(t) {
+  tool = t;
+  document.getElementById('btn-pen').classList.toggle('active', t === 'pen');
+  document.getElementById('btn-eraser').classList.toggle('active', t === 'eraser');
+  if (t === 'eraser' && brushSize < 10) {
+    brushSize = 20; slider.value = 20; sizeValEl.textContent = 20;
+  }
+}
+
+function onSizeChange(v) {
+  brushSize = parseInt(v, 10);
+  sizeValEl.textContent = v;
+}
+
+// ── Drawing ────────────────────────────────────────────────────────────────
+function canvasPos(e) {
+  const rect   = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const src    = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+}
+
+function onDown(e) {
+  if (!joined || !gameRole || gameRole === 'watch') return;
+  e.preventDefault();
+  drawing = true;
+  const { x, y } = canvasPos(e);
+  lastX = x; lastY = y;
+  sendStroke(x, y, x + 0.01, y + 0.01);
+}
+
+function onMove(e) {
+  if (!joined || !gameRole || gameRole === 'watch' || !drawing) return;
+  e.preventDefault();
+  const { x, y } = canvasPos(e);
+  sendStroke(lastX, lastY, x, y);
+  lastX = x; lastY = y;
+}
+
+function onUp() { drawing = false; }
+
+function sendStroke(x0, y0, x1, y1) {
+  send({ type: tool === 'eraser' ? 'erase' : 'line', x0, y0, x1, y1, size: brushSize });
+}
+
+canvas.addEventListener('mousedown',  onDown);
+canvas.addEventListener('mousemove',  onMove);
+canvas.addEventListener('mouseup',    onUp);
+canvas.addEventListener('mouseleave', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove',  onMove, { passive: false });
+canvas.addEventListener('touchend',   onUp);
+
+// ── Guess ──────────────────────────────────────────────────────────────────
+function sendGuess() {
+  const input = document.getElementById('guess-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  send({ type: 'guess', text });
+  input.value = '';
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+connect();
+</script>
+</body>
+</html>
