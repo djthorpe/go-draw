@@ -35,8 +35,10 @@ var wordBank = []string{
 	"elephant", "spaceship", "bicycle", "waterfall", "snowman",
 	"treasure", "mushroom", "lantern", "compass", "anchor", "crown",
 	"balloon", "cannon", "dinosaur", "fireworks",
-	"astrolabe", "sextant", "obelisk", "thimble", "retort", "sundial",
-	"love", "happiness", "kindness", "curiosity", "friendship", "wonder",
+	"sextant", "obelisk", "thimble", "sundial",
+	"bucket", "ladder", "mirror", "candle", "key", "hammer", "kite",
+	"boat", "bridge", "fence", "window", "wheel", "shoe", "hat", "glove",
+	"love", "happiness", "curiosity", "friendship", "wonder",
 }
 
 const (
