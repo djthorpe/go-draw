@@ -35,6 +35,20 @@ var wordBank = []string{
 	"elephant", "spaceship", "bicycle", "waterfall", "snowman",
 	"treasure", "mushroom", "lantern", "compass", "anchor", "crown",
 	"balloon", "cannon", "dinosaur", "fireworks",
+	"sextant", "obelisk", "thimble", "sundial",
+	"bucket", "ladder", "mirror", "candle", "key", "hammer", "kite",
+	"boat", "bridge", "fence", "window", "wheel", "shoe", "hat", "glove",
+	"love", "happiness", "curiosity", "friendship", "wonder",
+	"parrot", "octopus", "flamingo", "crocodile", "jellyfish", "hedgehog",
+	"shark", "turtle", "koala", "gorilla",
+	"taco", "sushi", "cupcake", "pretzel", "watermelon", "doughnut",
+	"popcorn", "broccoli", "pineapple", "corn",
+	"backpack", "trophy", "parachute", "hourglass", "scarecrow",
+	"windmill", "igloo", "tent", "swing", "catapult",
+	"scissors", "toothbrush", "envelope", "fork", "comb",
+	"helicopter", "tractor", "ambulance", "canoe",
+	"pirate", "mermaid", "wizard", "knight", "ghost", "witch",
+	"island", "cave", "wave", "cliff", "glacier",
 }
 
 const (
