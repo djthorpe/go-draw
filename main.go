@@ -49,6 +49,8 @@ var wordBank = []string{
 	"helicopter", "tractor", "ambulance", "canoe",
 	"pirate", "mermaid", "wizard", "knight", "ghost", "witch",
 	"island", "cave", "wave", "cliff", "glacier",
+	"OKR", "AI", "Fabric", "sprint", "Hala", "meeting",
+	"synergy", "semantic",
 }
 
 const (
